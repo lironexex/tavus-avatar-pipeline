@@ -32,27 +32,30 @@ def download_video(url, target_path):
 
 
 def loop_video_for_tavus(input_path, output_path, target_duration=120):
-    """Creates a 2-minute training video with strict H.264 encoding for Tavus."""
-    print(f"Processing {target_duration}s seamless training video with strict codec settings...")
+    """Creates a training video with ultra-strict H.264 settings."""
+    print(f"Processing {target_duration}s video with Baseline H.264 profile...")
     try:
         temp_mirror = os.path.join(PROJECT_ROOT, "assets", "temp_mirror.mp4")
+
+        # Phase 1: Create the mirrored block
         input_vid = ffmpeg.input(input_path)
         v = input_vid.video
         v_rev = v.filter('reverse')
         joined = ffmpeg.concat(v, v_rev)
 
-        # Output temporary mirrored block with strict encoding
+        # Force YUV420P and Baseline profile for maximum compatibility
         ffmpeg.output(
             joined,
             temp_mirror,
             vcodec='libx264',
             pix_fmt='yuv420p',
-            profile='main', # Force Main profile for compatibility
-            level='4.0',
+            profile='baseline',  # Switched from 'main' to 'baseline'
+            level='3.0',  # Lower level for wider compatibility
+            an=None,  # Ensure no audio stream is present
             loglevel="error"
         ).run(overwrite_output=True)
 
-        # Loop to 120s total
+        # Phase 2: Loop to 120s
         (
             ffmpeg
             .input(temp_mirror, stream_loop=11)
@@ -61,16 +64,18 @@ def loop_video_for_tavus(input_path, output_path, target_duration=120):
                 t=target_duration,
                 vcodec='libx264',
                 pix_fmt='yuv420p',
-                profile='main', # Ensure the loop maintains the profile
-                level='4.0',
-                r=25, # Required 25fps for Phoenix
+                profile='baseline',
+                level='3.0',
+                r=25,  # Explicitly set 25fps
+                movflags='+faststart',  # Move metadata to front for faster API reading
                 loglevel="error"
             )
             .run(overwrite_output=True)
         )
+
         if os.path.exists(temp_mirror):
             os.remove(temp_mirror)
-        print(f"Success! Final compatible video ready at: {output_path}")
+        print(f"Success! Re-encoded video ready at: {output_path}")
     except ffmpeg.Error as e:
         print(f"FFmpeg Error: {e.stderr.decode() if e.stderr else str(e)}")
 
