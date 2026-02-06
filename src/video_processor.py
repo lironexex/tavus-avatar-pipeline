@@ -32,12 +32,8 @@ def download_video(url, target_path):
 
 
 def loop_video_for_tavus(input_path, output_path, target_duration=120):
-    """Creates a 2-minute training video with a seamless mirror loop."""
-    print(f"Processing {target_duration}s seamless training video...")
-
-    # Ensure the assets directory exists
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-
+    """Creates a 2-minute training video with strict H.264 encoding for Tavus."""
+    print(f"Processing {target_duration}s seamless training video with strict codec settings...")
     try:
         temp_mirror = os.path.join(PROJECT_ROOT, "assets", "temp_mirror.mp4")
         input_vid = ffmpeg.input(input_path)
@@ -45,10 +41,18 @@ def loop_video_for_tavus(input_path, output_path, target_duration=120):
         v_rev = v.filter('reverse')
         joined = ffmpeg.concat(v, v_rev)
 
-        # Create 10s seamless mirror block
-        ffmpeg.output(joined, temp_mirror, vcodec='libx264', loglevel="error").run(overwrite_output=True)
+        # Output temporary mirrored block with strict encoding
+        ffmpeg.output(
+            joined,
+            temp_mirror,
+            vcodec='libx264',
+            pix_fmt='yuv420p',
+            profile='main', # Force Main profile for compatibility
+            level='4.0',
+            loglevel="error"
+        ).run(overwrite_output=True)
 
-        # Loop to 120s total for Phoenix training requirements
+        # Loop to 120s total
         (
             ffmpeg
             .input(temp_mirror, stream_loop=11)
@@ -57,14 +61,16 @@ def loop_video_for_tavus(input_path, output_path, target_duration=120):
                 t=target_duration,
                 vcodec='libx264',
                 pix_fmt='yuv420p',
-                r=25,
+                profile='main', # Ensure the loop maintains the profile
+                level='4.0',
+                r=25, # Required 25fps for Phoenix
                 loglevel="error"
             )
             .run(overwrite_output=True)
         )
         if os.path.exists(temp_mirror):
             os.remove(temp_mirror)
-        print(f"Success! Final Tavus training video ready at: {output_path}")
+        print(f"Success! Final compatible video ready at: {output_path}")
     except ffmpeg.Error as e:
         print(f"FFmpeg Error: {e.stderr.decode() if e.stderr else str(e)}")
 
