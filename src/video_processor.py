@@ -4,46 +4,60 @@ import os
 import ffmpeg
 from dotenv import load_dotenv
 
+# 1. Determine the Project Root (one level up from 'src')
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+
+# Load environment variables for absolute path consistency
 load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
 
 
-def loop_video_for_tavus(input_path, output_path, target_duration=120):
+def merge_video_and_audio(video_input, audio_input, output_path):
     """
-    Final Fix based on official Tavus Documentation:
-    1. Force 1080p resolution.
-    2. Use H.264 for video.
-    3. Include AAC audio (even if silent).
+    Merges the generated video movement with the training audio.
+    Ensures 1080p resolution and AAC audio codec as per Tavus requirements.
     """
-    print(f"Processing 120s video: 1080p, H.264 + AAC (Tavus Specs)...")
+    print("Merging video and audio into final 1080p training file...")
 
     try:
-        # We generate a silent audio source to satisfy the AAC requirement
-        silent_audio = ffmpeg.input('anullsrc=channel_layout=stereo:sample_rate=44100', f='lavfi')
+        # Step 1: Input the raw video clip and loop it to match the 120s audio
+        # stream_loop=24 ensures we have enough frames for 2 minutes
+        v = ffmpeg.input(video_input, stream_loop=24)
 
-        # Input video looped to 120s
-        input_vid = ffmpeg.input(input_path, stream_loop=24)
+        # Step 2: Input the pre-generated training audio (1m speech + 1m silence)
+        a = ffmpeg.input(audio_input)
 
+        # Step 3: Combine them using strict Tavus Phoenix-3 specifications
         (
             ffmpeg
             .output(
-                input_vid.video,
-                silent_audio.audio,
+                v.video,
+                a.audio,
                 output_path,
-                t=target_duration,
-                vcodec='libx264',
-                acodec='aac',  # MANDATORY: AAC audio codec
-                pix_fmt='yuv420p',
-                vf='scale=1920:1080',  # MANDATORY: Minimum 1080p
-                r=25,  # MANDATORY: 25 fps
-                movflags='+faststart',
-                shortest=None,
+                t=120,  # Force exactly 120 seconds duration
+                vcodec='libx264',  # Standard H.264 video codec
+                acodec='aac',  # MANDATORY: AAC audio codec for mp4 containers
+                pix_fmt='yuv420p',  # Standard 8-bit color depth
+                vf='scale=1920:1080',  # MANDATORY: Minimum 1080p resolution
+                r=25,  # MANDATORY: 25 frames per second
+                movflags='+faststart',  # Optimizes file for faster web/API processing
                 loglevel="error"
             )
             .run(overwrite_output=True)
         )
-        print(f"Success! Video matches Tavus requirements at: {output_path}")
+        print(f"✅ Success! Final training video created at: {output_path}")
 
     except ffmpeg.Error as e:
+        # Decode and print FFmpeg errors for easier debugging
         print(f"FFmpeg Error: {e.stderr.decode() if e.stderr else str(e)}")
+
+if __name__ == "__main__":
+    # Standard paths for standalone testing
+    RAW_CLIP = os.path.join(PROJECT_ROOT, "assets", "raw_movement.mp4")
+    TRAINING_AUDIO = os.path.join(PROJECT_ROOT, "assets", "training_audio.aac")
+    FINAL_VIDEO = os.path.join(PROJECT_ROOT, "assets", "tavus_training_video.mp4")
+
+    if os.path.exists(RAW_CLIP) and os.path.exists(TRAINING_AUDIO):
+        merge_video_and_audio(RAW_CLIP, TRAINING_AUDIO, FINAL_VIDEO)
+    else:
+        print("Error: Missing input assets for merging.")

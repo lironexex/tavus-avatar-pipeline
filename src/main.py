@@ -9,8 +9,9 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 sys.path.append(SCRIPT_DIR)
 
-# Import our new modular components
+# Import our modular components
 import fal_generator
+import audio_generator
 import video_processor
 import tavus_trigger
 from dropbox_utils import upload_and_get_link
@@ -19,38 +20,44 @@ from dropbox_utils import upload_and_get_link
 def run_pipeline():
     """
     Orchestrates the full Avatar creation pipeline:
-    1. Fal (Generation) -> 2. FFmpeg (Processing) -> 3. Dropbox (Upload) -> 4. Tavus (Trigger)
+    1. Fal (Movement) -> 2. TTS (Audio) -> 3. FFmpeg (Merge) -> 4. Dropbox (Cloud) -> 5. Tavus (Train)
     """
     load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
 
     # Configuration paths
     image_input = os.path.join(PROJECT_ROOT, "assets", "generated_person_example_1.png")
     raw_clip = os.path.join(PROJECT_ROOT, "assets", "raw_movement.mp4")
+    training_audio = os.path.join(PROJECT_ROOT, "assets", "training_audio.aac")
     final_video = os.path.join(PROJECT_ROOT, "assets", "tavus_training_video.mp4")
 
     print("--- Phase 1: Asset Generation (Fal.ai) ---")
-    # Only generate the expensive raw clip if it doesn't exist
     if not os.path.exists(raw_clip):
         fal_generator.generate_avatar_movement(image_input, raw_clip)
     else:
         print(f"Using existing raw clip: {raw_clip}")
 
-    print("\n--- Phase 2: Video Processing (FFmpeg) ---")
-    # Always process to ensure the latest codec fixes are applied
-    video_processor.loop_video_for_tavus(raw_clip, final_video)
+    print("\n--- Phase 2: Audio Generation (TTS) ---")
+    # Always regenerate audio to ensure consent and structure are correct
+    audio_success = audio_generator.generate_training_audio(training_audio)
 
-    print("\n--- Phase 3: Cloud Upload & API Trigger ---")
-    # Upload and get the direct link
+    if not audio_success:
+        print("Pipeline stopped: Audio generation failed.")
+        return
+
+    print("\n--- Phase 3: Final Merging (FFmpeg) ---")
+    # Merge the looped visual with the speech-then-silence audio
+    video_processor.merge_video_and_audio(raw_clip, training_audio, final_video)
+
+    print("\n--- Phase 4: Cloud Upload & API Trigger ---")
     video_url = upload_and_get_link(final_video)
 
     if video_url:
-        # Trigger the training
         replica_id = tavus_trigger.trigger_tavus(video_url)
 
         if replica_id:
-            # Immediate status verification
+            # Automatic status check to catch initial validation errors
             tavus_trigger.check_status_automated(replica_id)
-            print("\nPipeline complete! Monitor the Replica ID above.")
+            print("\nPipeline complete! Please wait 4-6 hours for training.")
         else:
             print("Failed to start Tavus training.")
     else:

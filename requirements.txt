@@ -4,3 +4,4 @@ requests
 ffmpeg-python
 dropbox
 tqdm
+gtts
