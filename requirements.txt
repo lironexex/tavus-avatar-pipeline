@@ -1,4 +1,4 @@
 fal-client
 python-dotenv
 requests
-ffmpeg
+ffmpeg-python
