@@ -1,0 +1,7 @@
+fal-client
+python-dotenv
+requests
+ffmpeg-python
+dropbox
+tqdm
+edge_tts
