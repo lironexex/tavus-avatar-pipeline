@@ -20,7 +20,7 @@ from dropbox_utils import upload_and_get_link
 def run_pipeline():
     """
     Orchestrates the full Avatar creation pipeline:
-    1. Fal (Movement) -> 2. TTS (Audio) -> 3. FFmpeg (Merge) -> 4. Dropbox (Cloud) -> 5. Tavus (Train)
+    1. Fal (Movement) -> 2. Neural TTS (Audio) -> 3. FFmpeg (Merge) -> 4. Dropbox (Cloud) -> 5. Tavus (Train)
     """
     load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
 
@@ -36,8 +36,8 @@ def run_pipeline():
     else:
         print(f"Using existing raw clip: {raw_clip}")
 
-    print("\n--- Phase 2: Audio Generation (TTS) ---")
-    # Always regenerate audio to ensure consent and structure are correct
+    print("\n--- Phase 2: Audio Generation (Neural TTS) ---")
+    # audio_generator now uses edge-tts for a natural male voice
     audio_success = audio_generator.generate_training_audio(training_audio)
 
     if not audio_success:
@@ -45,10 +45,11 @@ def run_pipeline():
         return
 
     print("\n--- Phase 3: Final Merging (FFmpeg) ---")
-    # Merge the looped visual with the speech-then-silence audio
+    # Merge the looped visual with the natural speech-then-silence audio
     video_processor.merge_video_and_audio(raw_clip, training_audio, final_video)
 
     print("\n--- Phase 4: Cloud Upload & API Trigger ---")
+    # Upload and get direct link for Tavus
     video_url = upload_and_get_link(final_video)
 
     if video_url:

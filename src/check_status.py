@@ -13,7 +13,7 @@ PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
 
 # 3. Use the NEW Replica ID you just generated
-REPLICA_ID = "re352c876206"
+REPLICA_ID = "r60ba11413d5"
 
 
 def check_replica_status():

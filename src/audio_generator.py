@@ -1,11 +1,12 @@
 # src/audio_generator.py
 
 import os
-from gtts import gTTS
+import asyncio
+import edge_tts
 import ffmpeg
 from dotenv import load_dotenv
 
-# 1. Determine the Project Root (one level up from 'src')
+# 1. Determine the Project Root
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 
@@ -25,49 +26,56 @@ STORY_TEXT = (
     "I am working on a professional AI avatar pipeline using the Phoenix 3 model. "
     "It is important to maintain a steady tone and natural pauses during this recording. "
     "I am sitting upright and looking directly at the camera. "
-    "This process involves many steps, including video generation and audio syncing."
+    "This process involves many steps, including video generation and audio syncing. "
+    "The goal is to achieve high-fidelity lip-sync and natural movement for the final replica."
+    "Hopefully everything will go smoothly, I am excited to work around this problem."
+    "I will be now silent for about 1 minute as it was a requirement from Tavus."
 )
+
+
+async def generate_neural_speech(text, output_path):
+    """Generates natural male neural speech."""
+    # 'en-US-ChristopherNeural' is a very clear, professional male voice
+    communicate = edge_tts.Communicate(text, "en-US-ChristopherNeural")
+    await communicate.save(output_path)
 
 
 def generate_training_audio(output_path):
     """
     Generates the required 2-minute training audio:
-    - 00:00 - 01:00: Speech (Consent + Story)
-    - 01:00 - 02:00: Silence
+    - 00:00 - 01:00: Natural Neural Male Speech
+    - 01:00 - 02:00: Digital Silence
     """
-    print("Generating 2-minute training audio (1m speech + 1m silence)...")
+    print("Generating natural 2-minute training audio (Neural Male Voice)...")
 
     temp_speech_mp3 = os.path.join(PROJECT_ROOT, "assets", "temp_speech.mp3")
 
     try:
-        # Step 1: Generate the speech using Google Text-to-Speech
-        tts = gTTS(text=CONSENT_TEXT + STORY_TEXT, lang='en')
-        tts.save(temp_speech_mp3)
+        # Step 1: Generate high-quality neural speech
+        asyncio.run(generate_neural_speech(CONSENT_TEXT + STORY_TEXT, temp_speech_mp3))
 
-        # Step 2: Use FFmpeg to concat 60s of speech with 60s of silence
-        # We move loglevel inside .output() to avoid the 'unexpected keyword' error
+        # Step 2: Concat 60s speech with 60s silence using clean FFmpeg filters
+        # We ensure 44100Hz and mono to remove that background hum
+        speech_input = ffmpeg.input(temp_speech_mp3).filter('atrim', duration=60)
+        silence_input = ffmpeg.input('anullsrc=r=44100:cl=mono', f='lavfi', t=60)
+
         (
             ffmpeg
-            .filter([
-                ffmpeg.input(temp_speech_mp3).filter('atrim', duration=60).filter('apad', whole_len=44100 * 60),
-                ffmpeg.input('anullsrc=r=44100:cl=mono', f='lavfi', t=60)
-            ], 'concat', n=2, v=0, a=1)
-            .output(output_path, acodec='aac', ar=44100, loglevel="error")
+            .concat(speech_input, silence_input, v=0, a=1)
+            .output(output_path, acodec='aac', ar=44100, ac=1, loglevel="error")
             .run(overwrite_output=True)
         )
-        print(f"✅ Success! Training audio created at: {output_path}")
+        print(f"✅ Success! Natural training audio created at: {output_path}")
         return True
 
     except Exception as e:
         print(f"Audio Generation Error: {e}")
         return False
     finally:
-        # Clean up the temporary MP3 file
         if os.path.exists(temp_speech_mp3):
             os.remove(temp_speech_mp3)
 
 
 if __name__ == "__main__":
-    # Allows for standalone testing of the audio script
     test_path = os.path.join(PROJECT_ROOT, "assets", "training_audio.aac")
     generate_training_audio(test_path)
